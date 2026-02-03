@@ -1,7 +1,18 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppStage, Question } from './types';
 import { generateQuestions, analyzeDecision } from './geminiService';
+
+// 전역 윈도우 객체 확장 - AIStudio 타입이 이미 정의되어 있는 경우 이를 따르도록 수정
+declare global {
+  interface AIStudio {
+    hasSelectedApiKey: () => Promise<boolean>;
+    openSelectKey: () => Promise<void>;
+  }
+  interface Window {
+    aistudio?: AIStudio;
+  }
+}
 
 const App: React.FC = () => {
   const [stage, setStage] = useState<AppStage>(AppStage.START);
@@ -12,6 +23,32 @@ const App: React.FC = () => {
   const [loadingMessage, setLoadingMessage] = useState('');
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [needsKey, setNeedsKey] = useState(false);
+
+  // 초기 로드 시 API 키 상태 확인
+  useEffect(() => {
+    const checkApiKey = async () => {
+      const envKey = process.env.API_KEY;
+      const isKeyMissing = !envKey || envKey === "undefined" || envKey.trim() === "";
+      
+      if (isKeyMissing && window.aistudio) {
+        const hasKey = await window.aistudio.hasSelectedApiKey();
+        if (!hasKey) {
+          setNeedsKey(true);
+        }
+      }
+    };
+    checkApiKey();
+  }, []);
+
+  const handleOpenKeyDialog = async () => {
+    if (window.aistudio) {
+      // 키 선택 대화상자를 엽니다.
+      await window.aistudio.openSelectKey();
+      // 가이드라인에 따라 선택 성공으로 가정하고 앱을 진행합니다.
+      setNeedsKey(false);
+    }
+  };
 
   const startDecisionProcess = async () => {
     if (!topic.trim()) return;
@@ -25,7 +62,13 @@ const App: React.FC = () => {
       setStage(AppStage.ANSWERING);
       setCurrentIndex(0);
     } catch (err: any) {
-      setError(err.message || '오류가 발생했습니다.');
+      // 404 Requested entity was not found 에러 시 키 선택창 다시 띄우기
+      if (err.message && err.message.includes("Requested entity was not found.")) {
+        setError("API 키를 찾을 수 없거나 결제 설정이 필요합니다. 다시 선택해주세요.");
+        setNeedsKey(true);
+      } else {
+        setError(err.message || '오류가 발생했습니다.');
+      }
       setStage(AppStage.START);
     }
   };
@@ -56,7 +99,13 @@ const App: React.FC = () => {
       setResult(finalResult);
       setStage(AppStage.RESULT);
     } catch (err: any) {
-      setError(err.message || '분석 중 오류가 발생했습니다.');
+      // 404 Requested entity was not found 에러 시 키 선택창 다시 띄우기
+      if (err.message && err.message.includes("Requested entity was not found.")) {
+        setError("API 키를 찾을 수 없거나 결제 설정이 필요합니다. 다시 선택해주세요.");
+        setNeedsKey(true);
+      } else {
+        setError(err.message || '분석 중 오류가 발생했습니다.');
+      }
       setStage(AppStage.START);
     }
   };
@@ -70,6 +119,34 @@ const App: React.FC = () => {
     setResult(null);
     setError(null);
   };
+
+  // API 키가 필요한 경우의 화면
+  if (needsKey) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-slate-100">
+        <div className="bg-white p-8 rounded-3xl shadow-2xl max-w-md w-full text-center space-y-6">
+          <div className="w-20 h-20 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto text-3xl">
+            <i className="fas fa-key"></i>
+          </div>
+          <h1 className="text-2xl font-bold text-slate-800">API 키 연결 필요</h1>
+          <p className="text-slate-600 leading-relaxed">
+            Gemini AI를 사용하기 위해 API 키 설정이 필요합니다.<br/>
+            아래 버튼을 눌러 유효한 API 키를 선택해주세요.
+          </p>
+          <button 
+            onClick={handleOpenKeyDialog}
+            className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl shadow-lg transition-all flex items-center justify-center gap-3"
+          >
+            <i className="fas fa-external-link-alt"></i> API 키 선택하기
+          </button>
+          <p className="text-xs text-slate-400">
+            결제 정보가 등록된 프로젝트의 키가 필요할 수 있습니다.<br/>
+            <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noreferrer" className="underline">과금 정책 확인하기</a>
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 md:p-8 bg-slate-50">
@@ -86,9 +163,15 @@ const App: React.FC = () => {
 
         {/* Error Message */}
         {error && (
-          <div className="m-6 p-4 bg-red-50 border-l-4 border-red-500 text-red-700 flex items-center gap-3">
-            <i className="fas fa-exclamation-circle"></i>
-            <p>{error}</p>
+          <div className="m-6 p-4 bg-red-50 border-l-4 border-red-500 text-red-700 flex items-center gap-3 animate-pulse">
+            <i className="fas fa-exclamation-circle text-xl"></i>
+            <div className="flex-1">
+              <p className="font-bold">시스템 오류</p>
+              <p className="text-sm opacity-90">{error}</p>
+            </div>
+            <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600">
+              <i className="fas fa-times"></i>
+            </button>
           </div>
         )}
 

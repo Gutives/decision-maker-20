@@ -6,10 +6,19 @@ import { Question } from "./types";
 declare var process: { env: { [key: string]: string | undefined } };
 
 const getAIInstance = () => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey || apiKey.trim() === "") {
-    throw new Error("API 키가 설정되지 않았습니다. Vercel 프로젝트 설정에서 API_KEY 환경 변수를 확인해주세요.");
+  // 환경 변수에서 API 키를 가져옵니다.
+  let apiKey: string | undefined;
+  try {
+    apiKey = process.env.API_KEY;
+  } catch (e) {
+    apiKey = undefined;
   }
+
+  // 키가 없거나, 문자열 "undefined"로 잘못 들어온 경우 체크
+  if (!apiKey || apiKey === "undefined" || apiKey.trim() === "") {
+    throw new Error("API_KEY가 설정되지 않았습니다. Vercel 설정이나 API 키 선택 버튼을 확인해주세요.");
+  }
+  
   return new GoogleGenAI({ apiKey });
 };
 
