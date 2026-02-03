@@ -2,28 +2,20 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { Question } from "./types";
 
-// Vercel/Vite 빌드 환경에서 전역 process 객체에 대한 타입 에러를 방지합니다.
-declare var process: { env: { [key: string]: string | undefined } };
-
-const getAIInstance = () => {
-  // 환경 변수에서 API 키를 가져옵니다.
-  let apiKey: string | undefined;
-  try {
-    apiKey = process.env.API_KEY;
-  } catch (e) {
-    apiKey = undefined;
+/**
+ * 최신 API 키를 사용하여 GoogleGenAI 인스턴스를 생성합니다.
+ * 시스템 가이드라인에 따라 process.env.API_KEY를 직접 사용합니다.
+ */
+const createAI = () => {
+  const apiKey = process.env.API_KEY;
+  if (!apiKey || apiKey === 'undefined' || apiKey.trim() === '') {
+    throw new Error("서비스 구성이 완료되지 않았습니다. 잠시 후 다시 시도해주세요.");
   }
-
-  // 키가 없거나, 문자열 "undefined"로 잘못 들어온 경우 체크
-  if (!apiKey || apiKey === "undefined" || apiKey.trim() === "") {
-    throw new Error("API_KEY가 설정되지 않았습니다. Vercel 설정이나 API 키 선택 버튼을 확인해주세요.");
-  }
-  
   return new GoogleGenAI({ apiKey });
 };
 
 export const generateQuestions = async (topic: string): Promise<Question[]> => {
-  const ai = getAIInstance();
+  const ai = createAI();
 
   const prompt = `I want to make a decision about: "${topic}". 
   Please generate exactly 20 multiple-choice questions to help me narrow down the best decision. 
@@ -55,22 +47,19 @@ export const generateQuestions = async (topic: string): Promise<Question[]> => {
   });
 
   const responseText = response.text;
-  
   if (!responseText) {
-    throw new Error("질문을 생성하는 도중 오류가 발생했습니다. AI 응답이 비어있습니다.");
+    throw new Error("분석을 위한 질문을 생성하지 못했습니다.");
   }
 
   try {
-    const questions = JSON.parse(responseText);
-    return questions;
+    return JSON.parse(responseText);
   } catch (e) {
-    console.error("Failed to parse questions", e);
-    throw new Error("질문 데이터를 해석하는 도중 오류가 발생했습니다.");
+    throw new Error("데이터 해석 중 오류가 발생했습니다.");
   }
 };
 
 export const analyzeDecision = async (topic: string, questions: Question[], answers: Record<number, string>): Promise<string> => {
-  const ai = getAIInstance();
+  const ai = createAI();
 
   const context = questions.map(q => `Q: ${q.text} | A: ${answers[q.id]}`).join('\n');
   const prompt = `The user wants to decide on: "${topic}".
