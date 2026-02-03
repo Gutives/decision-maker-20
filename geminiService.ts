@@ -37,12 +37,20 @@ export const generateQuestions = async (topic: string): Promise<Question[]> => {
     }
   });
 
+  // response.text를 가져와서 확실히 값이 있는지 체크합니다.
+  const responseText = response.text;
+  
+  if (responseText === undefined || responseText === null || responseText === '') {
+    throw new Error("질문을 생성하는 도중 오류가 발생했습니다. AI 응답이 비어있습니다.");
+  }
+
   try {
-    const questions = JSON.parse(response.text);
+    // responseText! 를 사용하여 TypeScript에게 이 시점에서는 절대 undefined가 아님을 명시합니다.
+    const questions = JSON.parse(responseText!);
     return questions;
   } catch (e) {
     console.error("Failed to parse questions", e);
-    throw new Error("질문을 생성하는 도중 오류가 발생했습니다.");
+    throw new Error("질문 데이터를 해석하는 도중 오류가 발생했습니다.");
   }
 };
 
