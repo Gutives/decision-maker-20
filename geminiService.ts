@@ -2,6 +2,9 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { Question } from "./types";
 
+// Vercel/Vite 빌드 환경에서 전역 process 객체에 대한 타입 에러를 방지합니다.
+declare var process: { env: { [key: string]: string | undefined } };
+
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
 
 export const generateQuestions = async (topic: string): Promise<Question[]> => {
