@@ -2,10 +2,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { Question } from "./types";
 
-/**
- * 최신 API 키를 사용하여 GoogleGenAI 인스턴스를 생성합니다.
- * 시스템 가이드라인에 따라 process.env.API_KEY를 직접 사용합니다.
- */
 const createAI = () => {
   const apiKey = process.env.API_KEY;
   if (!apiKey || apiKey === 'undefined' || apiKey.trim() === '') {
@@ -58,7 +54,16 @@ export const generateQuestions = async (topic: string): Promise<Question[]> => {
   }
 };
 
-export const analyzeDecision = async (topic: string, questions: Question[], answers: Record<number, string>): Promise<string> => {
+export interface AnalysisResult {
+  finalRecommendation: string;
+  summary: string;
+  reasoning: string[];
+  pros: string[];
+  cons: string[];
+  nextSteps: string[];
+}
+
+export const analyzeDecision = async (topic: string, questions: Question[], answers: Record<number, string>): Promise<AnalysisResult> => {
   const ai = createAI();
 
   const context = questions.map(q => `Q: ${q.text} | A: ${answers[q.id]}`).join('\n');
@@ -66,19 +71,38 @@ export const analyzeDecision = async (topic: string, questions: Question[], answ
   Here are 20 questions and the user's answers:
   ${context}
   
-  Based on these specific answers, provide a comprehensive and helpful final decision. 
-  Break it down into:
-  1. The Final Recommendation (Bold and clear)
-  2. Reasoning (Why this choice suits the user's answers)
-  3. Pros and Cons of this choice
-  4. Next Steps or Advice.
-  
-  Please write in a professional yet friendly tone in Korean.`;
+  Based on these specific answers, provide a comprehensive and helpful final decision in Korean.
+  The output MUST be in JSON format matching the specified schema.`;
 
   const response = await ai.models.generateContent({
     model: "gemini-3-pro-preview",
     contents: prompt,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          finalRecommendation: { type: Type.STRING, description: "The single best choice in one clear sentence." },
+          summary: { type: Type.STRING, description: "A brief 2-sentence summary of the overall direction." },
+          reasoning: { type: Type.ARRAY, items: { type: Type.STRING }, description: "3-4 key reasons for this decision." },
+          pros: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Benefits of this choice." },
+          cons: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Potential risks or drawbacks." },
+          nextSteps: { type: Type.ARRAY, items: { type: Type.STRING }, description: "3-4 actionable steps to take next." }
+        },
+        required: ["finalRecommendation", "summary", "reasoning", "pros", "cons", "nextSteps"]
+      }
+    }
   });
 
-  return response.text || "결과를 도출할 수 없습니다.";
+  const resultText = response.text;
+  if (!resultText) {
+    throw new Error("분석 결과를 생성하지 못했습니다.");
+  }
+
+  try {
+    return JSON.parse(resultText);
+  } catch (e) {
+    console.error("Analysis JSON parse error", e);
+    throw new Error("결과 데이터를 처리하는 중 오류가 발생했습니다.");
+  }
 };
