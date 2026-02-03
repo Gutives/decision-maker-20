@@ -5,9 +5,10 @@ import { Question } from "./types";
 // Vercel/Vite 빌드 환경에서 전역 process 객체에 대한 타입 에러를 방지합니다.
 declare var process: { env: { [key: string]: string | undefined } };
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
-
 export const generateQuestions = async (topic: string): Promise<Question[]> => {
+  // 함수 호출 시점에 인스턴스를 생성하여 Top-level 에러를 방지합니다.
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+
   const prompt = `I want to make a decision about: "${topic}". 
   Please generate exactly 20 multiple-choice questions to help me narrow down the best decision. 
   Each question should have 3 to 4 clear options. 
@@ -37,16 +38,14 @@ export const generateQuestions = async (topic: string): Promise<Question[]> => {
     }
   });
 
-  // response.text를 가져와서 확실히 값이 있는지 체크합니다.
   const responseText = response.text;
   
-  if (responseText === undefined || responseText === null || responseText === '') {
+  if (!responseText) {
     throw new Error("질문을 생성하는 도중 오류가 발생했습니다. AI 응답이 비어있습니다.");
   }
 
   try {
-    // responseText! 를 사용하여 TypeScript에게 이 시점에서는 절대 undefined가 아님을 명시합니다.
-    const questions = JSON.parse(responseText!);
+    const questions = JSON.parse(responseText);
     return questions;
   } catch (e) {
     console.error("Failed to parse questions", e);
@@ -55,6 +54,9 @@ export const generateQuestions = async (topic: string): Promise<Question[]> => {
 };
 
 export const analyzeDecision = async (topic: string, questions: Question[], answers: Record<number, string>): Promise<string> => {
+  // 함수 호출 시점에 인스턴스를 생성합니다.
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+
   const context = questions.map(q => `Q: ${q.text} | A: ${answers[q.id]}`).join('\n');
   const prompt = `The user wants to decide on: "${topic}".
   Here are 20 questions and the user's answers:
