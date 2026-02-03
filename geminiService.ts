@@ -5,9 +5,16 @@ import { Question } from "./types";
 // Vercel/Vite 빌드 환경에서 전역 process 객체에 대한 타입 에러를 방지합니다.
 declare var process: { env: { [key: string]: string | undefined } };
 
+const getAIInstance = () => {
+  const apiKey = process.env.API_KEY;
+  if (!apiKey || apiKey.trim() === "") {
+    throw new Error("API 키가 설정되지 않았습니다. Vercel 프로젝트 설정에서 API_KEY 환경 변수를 확인해주세요.");
+  }
+  return new GoogleGenAI({ apiKey });
+};
+
 export const generateQuestions = async (topic: string): Promise<Question[]> => {
-  // 함수 호출 시점에 인스턴스를 생성하여 Top-level 에러를 방지합니다.
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+  const ai = getAIInstance();
 
   const prompt = `I want to make a decision about: "${topic}". 
   Please generate exactly 20 multiple-choice questions to help me narrow down the best decision. 
@@ -54,8 +61,7 @@ export const generateQuestions = async (topic: string): Promise<Question[]> => {
 };
 
 export const analyzeDecision = async (topic: string, questions: Question[], answers: Record<number, string>): Promise<string> => {
-  // 함수 호출 시점에 인스턴스를 생성합니다.
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+  const ai = getAIInstance();
 
   const context = questions.map(q => `Q: ${q.text} | A: ${answers[q.id]}`).join('\n');
   const prompt = `The user wants to decide on: "${topic}".
